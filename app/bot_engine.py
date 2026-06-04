@@ -319,17 +319,17 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                                 await page.wait_for_selector("iframe", timeout=30000)
                                 await asyncio.sleep(3) # Tunggu 3 detik agar elemen internal iframe siap (tombol play)
                                 
-                                await websocket.send_json({"type": "log", "content": f"Mengklik area Tombol 'Mulai Operasi' di bawah bola (Y: 510-550)..."})
+                                await websocket.send_json({"type": "log", "content": f"Mengklik area Tombol '▶ 开始操作' (sweep Y:450-490 berdasarkan screenshot nyata)..."})
                                 
-                                # Cukup klik 2x cepat (double click) di berbagai titik Y untuk garansi kena tombol
-                                await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
-                                await asyncio.sleep(0.2)
-                                await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'] + 20)
-                                await asyncio.sleep(0.2)
-                                await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'] + 40)
+                                # Sweep klik dari Y:450 sampai Y:490 - tombol terdeteksi di Y:465 dari screenshot
+                                base_y = COORDS['WEBRTC_IFRAME']['y']  # 465
+                                base_x = COORDS['WEBRTC_IFRAME']['x']  # 215
+                                for dy in [-15, -10, -5, 0, 5, 10, 15, 20, 25]:
+                                    await page.mouse.click(base_x, base_y + dy)
+                                    await asyncio.sleep(0.1)
                                 
-                                await websocket.send_json({"type": "log", "content": "Iframe diklik! Menunggu 15-20 detik agar OS Android selesai booting..."})
-                                await asyncio.sleep(18)
+                                await websocket.send_json({"type": "log", "content": "Play diklik (9x sweep)! Menunggu 20 detik agar OS Android booting..."})
+                                await asyncio.sleep(20)
                                 
                                 # Panggil AI Vision Autonomous State Machine
                                 await navigate_to_chrome(page, websocket)
