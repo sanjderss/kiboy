@@ -315,20 +315,20 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                         await websocket.send_json({"type": "log", "content": "Phone diklik! Menunggu WebRTC iframe muncul (8 detik)..."})
                         
                         if clicked:
-                            await asyncio.sleep(8)
                             # Masuk ke dalam WebRTC Iframe
-                            await websocket.send_json({"type": "log", "content": "Menunggu 10 detik untuk memuat Iframe WebRTC..."})
-                            await websocket.send_json({"type": "log", "content": "Menembus iframe WebRTC..."})
+                            await websocket.send_json({"type": "log", "content": "Menunggu 12 detik untuk memuat Iframe WebRTC..."})
+                            await asyncio.sleep(12)
                             try:
-                                # 6. SPAM KLIK Koordinat Iframe dari config_coordinates.py
-                                await websocket.send_json({"type": "log", "content": f"Memulai SPAM KLIK Koordinat Iframe (X:{COORDS['WEBRTC_IFRAME']['x']}, Y:{COORDS['WEBRTC_IFRAME']['y']}) secara brutal..."})
+                                await websocket.send_json({"type": "log", "content": f"Mengklik Tombol Play Iframe di (X:{COORDS['WEBRTC_IFRAME']['x']}, Y:{COORDS['WEBRTC_IFRAME']['y']})..."})
                                 
-                                # SPAM KLIK Loop 10x selama 10 detik agar tombol play di iframe pasti kena
-                                for i in range(10):
-                                    await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
-                                    await asyncio.sleep(0.5)
-                                    
-                                await websocket.send_json({"type": "log", "content": "Spam klik selesai! OS Android seharusnya mulai dimuat..."})
+                                # Cukup klik 2x cepat (double click), jangan spam 10x kelamaan supaya ga kepencet icon app di dalam OS
+                                await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
+                                await asyncio.sleep(0.5)
+                                await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
+                                
+                                await websocket.send_json({"type": "log", "content": "Klik Iframe selesai! Menunggu 15 detik agar OS Android selesai booting..."})
+                                await asyncio.sleep(15)
+                                
                                 # Panggil AI Vision Autonomous State Machine
                                 await navigate_to_chrome(page, websocket)
                                 
