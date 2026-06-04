@@ -315,21 +315,22 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                         await websocket.send_json({"type": "log", "content": "Phone diklik! Menunggu WebRTC iframe muncul (8 detik)..."})
                         
                         if clicked:
-                            # Masuk ke dalam WebRTC Iframe
-                            await websocket.send_json({"type": "log", "content": "Menunggu 12 detik untuk memuat Iframe WebRTC..."})
-                            await asyncio.sleep(12)
+                            # Masuk ke dalam WebRTC Iframe secara dinamis
+                            await websocket.send_json({"type": "log", "content": "Menunggu Iframe WebRTC muncul di DOM..."})
                             try:
+                                await page.wait_for_selector("iframe", timeout=30000)
+                                await asyncio.sleep(3) # Tunggu 3 detik agar elemen internal iframe siap (tombol play)
+                                
                                 await websocket.send_json({"type": "log", "content": f"Mengklik Tombol Play Iframe di (X:{COORDS['WEBRTC_IFRAME']['x']}, Y:{COORDS['WEBRTC_IFRAME']['y']})..."})
                                 
-                                # Cukup klik 2x cepat (double click), jangan spam 10x kelamaan supaya ga kepencet icon app di dalam OS
+                                # Cukup klik 2x cepat (double click)
                                 await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
                                 await asyncio.sleep(0.5)
                                 await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
                                 
-                                await websocket.send_json({"type": "log", "content": "Klik Iframe selesai! Menunggu 15 detik agar OS Android selesai booting..."})
-                                await asyncio.sleep(15)
+                                await websocket.send_json({"type": "log", "content": "Iframe diklik! Menyerahkan ke AI Vision (Realtime Polling)..."})
                                 
-                                # Panggil AI Vision Autonomous State Machine
+                                # Panggil AI Vision Autonomous State Machine LANGSUNG tanpa menunggu 15 detik!
                                 await navigate_to_chrome(page, websocket)
                                 
                                 # Tunggu beberapa detik untuk persiapan eksekusi tugas utama (Proxy/Tiktok dll)

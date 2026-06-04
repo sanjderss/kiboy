@@ -113,13 +113,19 @@ async def navigate_to_chrome(page, websocket):
         state = await determine_state(page)
         await websocket.send_json({"type": "log", "content": f"[Vision-State] Bot mendeteksi posisi saat ini: {state}"})
         
-        if state == "HOME_SCREEN" or state == "UNKNOWN":
-            # Jika di Home Screen ATAU state UNKNOWN (karena kadang gagal baca "Virtual Location"), 
-            # coba paksakan OCR mencari tulisan "App Store"
+        if state == "HOME_SCREEN":
             found = await click_by_ocr(page, websocket, ["store", "app", "rpa"], "Buka App Store", delay_after=5)
             if not found:
-                # Jika OCR gagal baca, baru pakai fallback hardcoded config
+                # Jika OCR gagal baca di Home Screen, baru pakai fallback
                 await click_hardcoded(page, websocket, "Fallback Buka App Store", "APP_STORE_ICON", delay_after=5)
+                
+        elif state == "UNKNOWN":
+            # OS mungkin masih booting atau frame belum sempurna
+            # Coba deteksi OCR pasif, JANGAN pakai hardcoded fallback di sini!
+            found = await click_by_ocr(page, websocket, ["store", "app", "rpa"], "Cari App Store (Passive)", delay_after=5)
+            if not found:
+                await websocket.send_json({"type": "log", "content": "[Vision-State] Layar belum dikenali (mungkin masih loading). Menunggu..."})
+                await asyncio.sleep(2)
             
         elif state == "APP_STORE":
             texts = await get_screen_text(page)
