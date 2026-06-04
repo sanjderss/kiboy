@@ -9,10 +9,10 @@ COORDS = {
     "WEBRTC_IFRAME": {"x": 215, "y": 465},  # Tombol '▶ 开始操作' - diukur dari screenshot nyata (Y:460-470)
 
     # == DALAM CLOUD PHONE (WEBRTC) ==
-    "APP_STORE_ICON": {"x": 120, "y": 320}, # Koordinat Icon App Store di Home Screen (Diperbarui)
+    "APP_STORE_ICON": {"x": 75, "y": 540},  # Koordinat Icon App Store di Home Screen (Diperbarui via OCR/Layout)
     "TAB_COMMON_APPS": {"x": 178, "y": 49}, # Koordinat Tab 'CommonApps' di dalam App Store
     "INSTALL_CHROME": {"x": 77, "y": 457},  # Koordinat tombol Download/Install Chrome
     "POPUP_INSTALL": {"x": 361, "y": 667},  # Koordinat tombol Install pada popup Android
     "OPEN_CHROME": {"x": 77, "y": 457},     # Koordinat tombol Open (setelah Chrome terinstall)
-    "HOME_BUTTON": {"x": 215, "y": 900}     # Koordinat tombol Home navigasi bawah Android
+    "HOME_BUTTON": {"x": 104, "y": 906}     # Tombol Home navigasi bawah Android (X:104 Y:906)
 }

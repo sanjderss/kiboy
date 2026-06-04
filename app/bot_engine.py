@@ -331,6 +331,10 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                                 await websocket.send_json({"type": "log", "content": "Play diklik (9x sweep)! Menunggu 20 detik agar OS Android booting..."})
                                 await asyncio.sleep(20)
                                 
+                                await websocket.send_json({"type": "log", "content": "OS Terbuka (GuardianMaster). Menekan tombol Home (🏠) di navbar bawah..."})
+                                await page.mouse.click(COORDS['HOME_BUTTON']['x'], COORDS['HOME_BUTTON']['y'])
+                                await asyncio.sleep(3)
+                                
                                 # Panggil AI Vision Autonomous State Machine
                                 await navigate_to_chrome(page, websocket)
                                 
