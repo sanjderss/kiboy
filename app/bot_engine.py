@@ -308,9 +308,9 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                         await page.screenshot(path="before_click_phone.png")
                         
                         # BLIND CLICK langsung ke koordinat thumbnail phone
-                        # Koordinat dari analisis screenshot: X=185, Y=350 (tengah gambar phone card)
-                        await websocket.send_json({"type": "log", "content": "Klik koordinat Phone (X:185, Y:350)..."})
-                        await page.mouse.click(185, 350)
+                        # Koordinat dari debug bounding_box: IMG x:31,y:112,w:123,h:220 → center X:92,Y:222
+                        await websocket.send_json({"type": "log", "content": "Klik koordinat Phone (X:92, Y:222)..."})
+                        await page.mouse.click(92, 222)
                         clicked = True
                         await websocket.send_json({"type": "log", "content": "Phone diklik! Menunggu WebRTC iframe muncul (8 detik)..."})
                         
