@@ -6,7 +6,7 @@ Ubah nilai X dan Y di sini jika ada perubahan posisi UI pada layar Cloud Phone.
 COORDS = {
     # == DASHBOARD ==
     "PHONE_THUMBNAIL": {"x": 92, "y": 222}, # Koordinat klik gambar thumbnail phone list
-    "WEBRTC_IFRAME": {"x": 215, "y": 400},  # Koordinat klik area iframe untuk memicu Android OS
+    "WEBRTC_IFRAME": {"x": 215, "y": 510},  # Koordinat tombol '▶ 开始操作' di bawah bola loading
 
     # == DALAM CLOUD PHONE (WEBRTC) ==
     "APP_STORE_ICON": {"x": 120, "y": 320}, # Koordinat Icon App Store di Home Screen (Diperbarui)
