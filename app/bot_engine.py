@@ -29,7 +29,7 @@ def start_xvfb():
     time.sleep(2)
 
 # FastAPI & UI routes removed for modularity
-
+from config_coordinates import COORDS
 from app.mail_handler import get_free_email, wait_for_otp
 from app.proxy_handler import mark_proxy_used, get_working_proxy
 from app.vision_navigator import navigate_to_chrome
@@ -308,9 +308,9 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                         await page.screenshot(path="before_click_phone.png")
                         
                         # BLIND CLICK langsung ke koordinat thumbnail phone
-                        # Koordinat dari debug bounding_box: IMG x:31,y:112,w:123,h:220 → center X:92,Y:222
-                        await websocket.send_json({"type": "log", "content": "Klik koordinat Phone (X:92, Y:222)..."})
-                        await page.mouse.click(92, 222)
+                        # Koordinat diambil dari config_coordinates.py
+                        await websocket.send_json({"type": "log", "content": f"Klik koordinat Phone (X:{COORDS['PHONE_THUMBNAIL']['x']}, Y:{COORDS['PHONE_THUMBNAIL']['y']})..."})
+                        await page.mouse.click(COORDS['PHONE_THUMBNAIL']['x'], COORDS['PHONE_THUMBNAIL']['y'])
                         clicked = True
                         await websocket.send_json({"type": "log", "content": "Phone diklik! Menunggu WebRTC iframe muncul (8 detik)..."})
                         
@@ -320,13 +320,13 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                             await websocket.send_json({"type": "log", "content": "Menunggu 10 detik untuk memuat Iframe WebRTC..."})
                             await websocket.send_json({"type": "log", "content": "Menembus iframe WebRTC..."})
                             try:
-                                await websocket.send_json({"type": "log", "content": "Memulai SPAM KLIK Koordinat Iframe (X:215, Y:400) secara brutal..."})
+                                # 6. SPAM KLIK Koordinat Iframe dari config_coordinates.py
+                                await websocket.send_json({"type": "log", "content": f"Memulai SPAM KLIK Koordinat Iframe (X:{COORDS['WEBRTC_IFRAME']['x']}, Y:{COORDS['WEBRTC_IFRAME']['y']}) secara brutal..."})
                                 
                                 # SPAM KLIK Loop 10x selama 10 detik agar tombol play di iframe pasti kena
                                 for i in range(10):
-                                    await page.mouse.click(215, 400)
-                                    await page.mouse.click(215, 420)
-                                    await asyncio.sleep(1)
+                                    await page.mouse.click(COORDS['WEBRTC_IFRAME']['x'], COORDS['WEBRTC_IFRAME']['y'])
+                                    await asyncio.sleep(0.5)
                                     
                                 await websocket.send_json({"type": "log", "content": "Spam klik selesai! OS Android seharusnya mulai dimuat..."})
                                 # Panggil AI Vision Autonomous State Machine

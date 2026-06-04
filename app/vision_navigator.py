@@ -5,15 +5,7 @@ import base64
 from PIL import Image
 import pytesseract
 
-# Konfigurasi Koordinat Presisi Tinggi (Hardcoded)
-COORDS = {
-    "APP_STORE_ICON": {"x": 67, "y": 385},
-    "TAB_COMMON_APPS": {"x": 178, "y": 49},
-    "INSTALL_CHROME": {"x": 77, "y": 457},
-    "POPUP_INSTALL": {"x": 361, "y": 667},
-    "OPEN_CHROME": {"x": 77, "y": 457},
-    "HOME_BUTTON": {"x": 215, "y": 900} # Asumsi home button Android
-}
+from config_coordinates import COORDS
 
 async def get_screen_text(page, quality=50):
     """Membaca seluruh teks di layar untuk menentukan State (Posisi saat ini)."""

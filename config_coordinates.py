@@ -1,0 +1,18 @@
+"""
+Konfigurasi Koordinat (X, Y) untuk navigasi UI WebRTC Cloud Phone.
+Ubah nilai X dan Y di sini jika ada perubahan posisi UI pada layar Cloud Phone.
+"""
+
+COORDS = {
+    # == DASHBOARD ==
+    "PHONE_THUMBNAIL": {"x": 92, "y": 222}, # Koordinat klik gambar thumbnail phone list
+    "WEBRTC_IFRAME": {"x": 215, "y": 400},  # Koordinat klik area iframe untuk memicu Android OS
+
+    # == DALAM CLOUD PHONE (WEBRTC) ==
+    "APP_STORE_ICON": {"x": 120, "y": 320}, # Koordinat Icon App Store di Home Screen (Diperbarui)
+    "TAB_COMMON_APPS": {"x": 178, "y": 49}, # Koordinat Tab 'CommonApps' di dalam App Store
+    "INSTALL_CHROME": {"x": 77, "y": 457},  # Koordinat tombol Download/Install Chrome
+    "POPUP_INSTALL": {"x": 361, "y": 667},  # Koordinat tombol Install pada popup Android
+    "OPEN_CHROME": {"x": 77, "y": 457},     # Koordinat tombol Open (setelah Chrome terinstall)
+    "HOME_BUTTON": {"x": 215, "y": 900}     # Koordinat tombol Home navigasi bawah Android
+}
