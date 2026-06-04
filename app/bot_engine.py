@@ -288,16 +288,14 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                         await websocket.send_json({"type": "log", "content": "Grup Trial ditemukan, masuk ke grup..."})
                         await group_element.click()
                         
-                        # Tunggu phone list termuat dulu sepenuhnya
-                        await websocket.send_json({"type": "log", "content": "Menunggu daftar HP termuat (15 detik)..."})
-                        await asyncio.sleep(15)
+                        # Tunggu phone list termuat secara DINAMIS (realtime), gausah nunggu 15 detik!
+                        await websocket.send_json({"type": "log", "content": "Menunggu daftar HP muncul di layar (realtime)..."})
                         
-                        # CEK apakah ada phone card sebelum klik
-                        # Cari text 'ID:' yang pasti ada di setiap phone card
                         phone_card_visible = False
                         try:
+                            # Cek ID: xxx, begitu muncul langsung sikat, max tunggu 30 detik
                             phone_id_el = page.locator("text=/ID:\\s*\\d+/").first
-                            await phone_id_el.wait_for(state="visible", timeout=5000)
+                            await phone_id_el.wait_for(state="visible", timeout=30000)
                             phone_card_visible = True
                             await websocket.send_json({"type": "log", "content": "Phone card terdeteksi! Melanjutkan klik..."})
                         except Exception:
