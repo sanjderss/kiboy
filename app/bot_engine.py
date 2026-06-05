@@ -35,9 +35,16 @@ from app.proxy_handler import mark_proxy_used, get_working_proxy
 from app.vision_navigator import navigate_to_chrome
 from app.task_manager import start_task, stop_task
 from app.vision_utils import wait_and_click_ocr, stream_visuals
+from app.vision_navigator import _broadcast_log, _broadcast_ai_state
 
 # Lock untuk membatasi hanya 1 bot yang jalan
 bot_lock = asyncio.Lock()
+
+
+async def send_log(websocket, content):
+    """Kirim log ke dashboard utama DAN debug dashboard."""
+    await websocket.send_json({"type": "log", "content": content})
+    await _broadcast_log(content)
 
 
 
@@ -56,13 +63,19 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                 # Parse account data: "Email: xxx | User: yyy | Pass: zzz"
                 import re
                 email_match = re.search(r"Email:\s*(.*?)\s*\|", account_data)
+                user_match = re.search(r"User:\s*(.*?)\s*\|", account_data)
                 pass_match = re.search(r"Pass:\s*(.*)", account_data)
                 
                 email_addr = email_match.group(1) if email_match else "unknown"
+                username = user_match.group(1) if user_match else (email_addr.split('@')[0] if '@' in email_addr else email_addr)
                 password = pass_match.group(1) if pass_match else "unknown"
                 
-                await websocket.send_json({"type": "log", "content": f"Mode Login: {email_addr}"})
+                await websocket.send_json({"type": "log", "content": f"Mode Login: {email_addr} (User: {username})"})
                 
+                import app.shared_ws as shared_ws
+                shared_ws.current_proxy = "Direct (Tanpa Proxy)"
+                shared_ws.current_account = email_addr
+
                 async with async_playwright() as p:
                     # Skip to the login portion directly
                     pass # We will handle this in the next chunk
@@ -74,8 +87,16 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                 if working_proxy:
                     await websocket.send_json({"type": "log", "content": f"Menggunakan Proxy Instan: {working_proxy}"})
                 else:
-                    await websocket.send_json({"type": "log", "content": "Kolam Proxy kosong! Menunggu Hunter..."})
-                    working_proxy = None
+                    await websocket.send_json({"type": "log", "content": "Kolam Proxy kosong! Menunggu Hunter (Max 30s)..."})
+                    for _ in range(30):
+                        await asyncio.sleep(1)
+                        working_proxy = await asyncio.to_thread(get_working_proxy)
+                        if working_proxy: break
+                        
+                    if working_proxy:
+                        await websocket.send_json({"type": "log", "content": f"Proxy Instan ditemukan: {working_proxy}"})
+                    else:
+                        await websocket.send_json({"type": "log", "content": "Gagal mendapat proxy dari Hunter! Berjalan tanpa proxy..."})
             
                 # 1. Email Setup
                 await websocket.send_json({"type": "log", "content": "Membuat email temporer gratis..."})
@@ -83,13 +104,22 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                 email_addr = email_obj.address
                 await websocket.send_json({"type": "log", "content": f"Email siap: {email_addr}"})
 
+                import app.shared_ws as shared_ws
+                shared_ws.current_proxy = working_proxy if working_proxy else "Direct (Tanpa Proxy)"
+                shared_ws.current_account = email_addr
+
                 async with async_playwright() as p:
                     launch_options = {
                         "headless": True,
                         "args": [
                             '--no-sandbox', 
                             '--disable-setuid-sandbox',
-                            '--autoplay-policy=no-user-gesture-required'
+                            '--autoplay-policy=no-user-gesture-required',
+                            '--no-first-run',
+                            '--no-default-browser-check',
+                            '--disable-first-run-ui',
+                            '--disable-blink-features=AutomationControlled',
+                            '--disable-features=UserAgentClientHint'
                         ]
                     }
                     if working_proxy:
@@ -104,12 +134,16 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                     page = await context.new_page()
                     await Stealth().apply_stealth_async(page)
                 
-                    # Block heavy assets to speed up slow proxies
+                    # Block heavy assets + Hapus Client Hint headers agar cocok dengan Safari iOS
                     async def intercept_route(route):
                         if route.request.resource_type in ["image", "media", "font", "stylesheet"]:
                             await route.abort()
                         else:
-                            await route.continue_()
+                            headers = route.request.headers.copy()
+                            for h in list(headers.keys()):
+                                if h.lower().startswith("sec-ch-ua"):
+                                    del headers[h]
+                            await route.continue_(headers=headers)
                 
                     await page.route("**/*", intercept_route)
 
@@ -178,8 +212,8 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                                     if working_proxy:
                                         from app.proxy_handler import mark_proxy_used
                                         mark_proxy_used(working_proxy)
-                                    await websocket.send_json({"type": "log", "content": "Bot dihentikan otomatis. Silakan klik Start lagi untuk mencoba IP Proxy lain."})
-                                    return # Berhenti agar finally menutup browser
+                                    await websocket.send_json({"type": "log", "content": "Restarting otomatis mencari IP baru..."})
+                                    raise Exception("IP_LIMIT_AUTO_RETRY")
                         except asyncio.CancelledError:
                             raise
                         except Exception:
@@ -195,6 +229,13 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                                 break
                             await asyncio.sleep(1)
 
+                        if not otp_code:
+                            await websocket.send_json({"type": "log", "content": "Gagal mendapat OTP! Proxy ini mungkin jelek. Restarting otomatis..."})
+                            if working_proxy:
+                                from app.proxy_handler import mark_proxy_used
+                                mark_proxy_used(working_proxy)
+                            raise Exception("OTP_TIMEOUT_AUTO_RETRY")
+                            
                         if otp_code:
                             # Isi OTP
                             await inputs.nth(1).fill(otp_code)
@@ -241,7 +282,12 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                         "args": [
                             '--no-sandbox', 
                             '--disable-setuid-sandbox',
-                            '--autoplay-policy=no-user-gesture-required'
+                            '--autoplay-policy=no-user-gesture-required',
+                            '--no-first-run',
+                            '--no-default-browser-check',
+                            '--disable-first-run-ui',
+                            '--disable-blink-features=AutomationControlled',
+                            '--disable-features=UserAgentClientHint'
                         ]
                     }
                     browser = await p.chromium.launch(**new_launch_options)
@@ -252,6 +298,18 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                     context = await browser.new_context(**new_device_config)
                     page = await context.new_page()
                     await Stealth().apply_stealth_async(page)
+                    
+                    # Block heavy assets + Hapus Client Hint headers agar cocok dengan Safari iOS
+                    async def intercept_route(route):
+                        if route.request.resource_type in ["image", "media", "font", "stylesheet"]:
+                            await route.abort()
+                        else:
+                            headers = route.request.headers.copy()
+                            for h in list(headers.keys()):
+                                if h.lower().startswith("sec-ch-ua"):
+                                    del headers[h]
+                            await route.continue_(headers=headers)
+                    await page.route("**/*", intercept_route)
                     
                     stop_visuals.clear()
                     visual_task = asyncio.create_task(stream_visuals(page, websocket, stop_visuals))
@@ -271,7 +329,7 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                     await asyncio.sleep(5)
                     
                     login_inputs = page.locator("input")
-                    await login_inputs.nth(0).fill(email_addr)
+                    await login_inputs.nth(0).fill(username)
                     await login_inputs.nth(1).fill(password)
                     
                     login_btn = page.locator('.dlbutton', has_text="Login")
@@ -317,18 +375,26 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                             await websocket.send_json({"type": "log", "content": "Menunggu Iframe WebRTC muncul di DOM..."})
                             try:
                                 await page.wait_for_selector("iframe", timeout=30000)
-                                await asyncio.sleep(3) # Tunggu 3 detik agar elemen internal iframe siap (tombol play)
+                                await asyncio.sleep(5) 
                                 
-                                await websocket.send_json({"type": "log", "content": f"Mengklik area Tombol '▶ 开始操作' (sweep Y:450-490 berdasarkan screenshot nyata)..."})
+                                await websocket.send_json({"type": "log", "content": "Mengklik center iframe..."})
                                 
-                                # Sweep klik dari Y:450 sampai Y:490 - tombol terdeteksi di Y:465 dari screenshot
-                                base_y = COORDS['WEBRTC_IFRAME']['y']  # 465
-                                base_x = COORDS['WEBRTC_IFRAME']['x']  # 215
-                                for dy in [-15, -10, -5, 0, 5, 10, 15, 20, 25]:
-                                    await page.mouse.click(base_x, base_y + dy)
-                                    await asyncio.sleep(0.1)
+                                try:
+                                    iframe_element = await page.query_selector("iframe")
+                                    frame = await iframe_element.content_frame()
+                                    if frame:
+                                        html = await frame.content()
+                                        await websocket.send_json({"type": "log", "content": f"Iframe HTML dump: {html[:200]}..."})
+                                        body = frame.locator("body")
+                                        box = await body.bounding_box()
+                                        if box:
+                                            await body.click(position={"x": box["width"]/2, "y": box["height"]/2}, force=True)
+                                            await websocket.send_json({"type": "log", "content": f"Mouse click pada frame body ({box['width']/2}, {box['height']/2}) dikirim."})
+                                    else:
+                                        await websocket.send_json({"type": "log", "content": "Frame tidak ditemukan!"})
+                                except Exception as e:
+                                    await websocket.send_json({"type": "log", "content": f"Gagal klik tombol mulai: {e}"})
                                 
-                                await websocket.send_json({"type": "log", "content": "Play diklik (9x sweep)! Menunggu 20 detik agar OS Android booting..."})
                                 await asyncio.sleep(20)
                                 
                                 await websocket.send_json({"type": "log", "content": "OS Terbuka (GuardianMaster). Menekan tombol Home (🏠) di navbar bawah..."})
@@ -341,11 +407,11 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                                 # Tunggu beberapa detik untuk persiapan eksekusi tugas utama (Proxy/Tiktok dll)
                                 await asyncio.sleep(5)
                                 
-                                await websocket.send_json({"type": "log", "content": "🎉 Chrome Search Bar TERBUKA! Misi Selesai dengan AI Vision!"})
+                                await send_log(websocket, "🎉 Misi Selesai: Chrome terbuka dan 'termux f-droid' sudah diketik!")
                                 
                                 # Simpan state berhasil
                                 from config_state import save_state
-                                await save_state(email_addr, {"status": "success", "chrome_ready": True})
+                                await save_state(email_addr, {"status": "success", "chrome_ready": True, "search_typed": True})
                             except asyncio.CancelledError:
                                 raise
                             except Exception as e:
@@ -353,7 +419,14 @@ async def run_bot_task(websocket, mode="register", account_data=None):
                             
                         await websocket.send_json({"type": "log", "content": "Selesai mengeksplorasi dashboard. Menunggu 15 detik untuk preview..."})
                     else:
-                        await websocket.send_json({"type": "log", "content": "Grup Trial (试用分组) tidak muncul di layar."})
+                        await page.screenshot(path="uploads/grup_trial_not_found.png")
+                        try:
+                            with open("uploads/grup_trial_not_found.png", "rb") as image_file:
+                                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                                await websocket.send_json({"type": "debug_image", "content": encoded_string})
+                        except Exception:
+                            pass
+                        await websocket.send_json({"type": "log", "content": "Grup Trial (试用分组) tidak muncul di layar. Screenshot disimpan di uploads/grup_trial_not_found.png"})
 
         except asyncio.CancelledError:
             await websocket.send_json({"type": "log", "content": "Proses bot dihentikan secara paksa."})

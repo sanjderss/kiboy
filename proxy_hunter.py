@@ -5,8 +5,25 @@ import concurrent.futures
 import random
 
 PROXY_SOURCES = [
+    # APIs
     "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
-    "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/http.txt"
+    "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks4&timeout=10000&country=all&ssl=all&anonymity=all",
+    "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=10000&country=all&ssl=all&anonymity=all",
+    "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc",
+    "https://spys.me/proxy.txt",
+    
+    # Github Repositories
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+    "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+    "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
+    "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies.txt",
+    "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
+    "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/proxies.txt",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",
+    "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt",
+    "https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt",
+    "https://raw.githubusercontent.com/ErcinDedooglu/proxies/main/proxies/http.txt"
 ]
 
 ACTIVE_PROXIES_FILE = "data/active_proxies.txt"
@@ -50,7 +67,12 @@ def test_proxy(proxy):
         r = requests.get("https://www.hippocloudphone.com/index.html", proxies={"http": proxy, "https": proxy}, timeout=3)
         if r.status_code == 200 and len(r.content) > 500:
             if (time.time() - start) < 2.5:
-                return proxy
+                # Cek kualitas IP menggunakan ip-api.com (filter hosting & proxy)
+                ip = proxy.split(":")[0]
+                check_r = requests.get(f"http://ip-api.com/json/{ip}?fields=hosting,proxy", timeout=3).json()
+                if not check_r.get("hosting", True) and not check_r.get("proxy", False):
+                    print(f"[Hunter] [+] Kualitas Tinggi (Residensial): {proxy}")
+                    return proxy
     except:
         pass
     return None
@@ -81,7 +103,7 @@ def hunt_proxies():
     
     # Gunakan thread pool untuk mengetes massal
     with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
-        futures = {executor.submit(test_proxy, p): p for p in candidates[:200]} # Tes 200 teratas saja tiap siklus
+        futures = {executor.submit(test_proxy, p): p for p in candidates[:1000]} # Tes 1000 teratas tiap siklus
         for future in concurrent.futures.as_completed(futures):
             p = future.result()
             if p:

@@ -1,4 +1,8 @@
+import sys
 import os
+# Fix PYTHONPATH agar 'from app.xxx import' bisa ditemukan
+sys.path.insert(0, "/workspaces/docker/au")
+
 import asyncio
 import base64
 import subprocess
@@ -12,7 +16,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
+# playwright_stealth diimport lazy saat dibutuhkan saja
 
 # Setup Environment untuk Xvfb (Virtual Display)
 DISPLAY_NUM = 99
@@ -21,16 +25,45 @@ os.environ["DISPLAY"] = f":{DISPLAY_NUM}"
 def start_xvfb():
     """Menjalankan Xvfb di background."""
     print(f"Starting Xvfb on display :{DISPLAY_NUM}...")
+    import subprocess
     subprocess.Popen([
         "Xvfb", f":{DISPLAY_NUM}", "-screen", "0", "1280x720x24"
     ])
-    # Beri waktu Xvfb untuk start
-    import time
-    time.sleep(2)
 
 app = FastAPI()
 
-# HTML Dasar untuk Dashboard Pemantauan
+# ============================================================
+# WEBSOCKET CONNECTIONS MANAGEMENT
+# ============================================================
+# Daftar semua WebSocket client (dashboard utama + debug)
+
+from app.shared_ws import debug_clients, dashboard_clients
+
+async def broadcast_to_all(data):
+    """Kirim data ke semua client (dashboard + debug)."""
+    dead = set()
+    for ws in dashboard_clients | debug_clients:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead.add(ws)
+    dashboard_clients.discard(*dead) if dead else None
+    debug_clients.discard(*dead) if dead else None
+
+async def broadcast_to_debug(data):
+    """Kirim data khusus ke debug clients saja."""
+    dead = set()
+    for ws in debug_clients:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead.add(ws)
+    debug_clients -= dead
+
+
+# ============================================================
+# HTML Dashboard Utama (Sama seperti sebelumnya, + link ke /debug)
+# ============================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -38,6 +71,10 @@ HTML_TEMPLATE = """
     <title>Zero-Cost Bot Panel</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .topbar h1 { margin: 0; }
+        .topbar a { color: #06b6d4; text-decoration: none; font-weight: bold; padding: 8px 16px; border: 1px solid #06b6d4; border-radius: 8px; transition: all 0.2s; }
+        .topbar a:hover { background: #06b6d4; color: #0f172a; }
         .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
         #live-container { background: #1e293b; border-radius: 12px; padding: 15px; border: 1px solid #334155; }
         #live-view { width: 100%; border-radius: 8px; background: #000; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
@@ -50,7 +87,10 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>🚀 Zero-Cost Bot Dashboard</h1>
+    <div class="topbar">
+        <h1>🚀 Zero-Cost Bot Dashboard</h1>
+        <a href="/debug" target="_blank">🔍 Open Debug Preview</a>
+    </div>
     <div class="grid">
         <div id="live-container">
             <div class="status-badge" id="bot-status">Status: Idle</div>
@@ -70,6 +110,16 @@ HTML_TEMPLATE = """
                 <option value="">Memuat akun...</option>
             </select>
             <button onclick="startLoginBot()" style="background: #10b981;">Login dengan Akun Terpilih</button>
+            
+            <h3 style="margin-top: 20px; border-top: 1px solid #334155; padding-top: 20px;">Upload Image & Send Command</h3>
+            <form id="upload-form" style="margin-bottom: 10px;">
+                <input type="file" id="image-upload" accept="image/*" style="width: 100%; margin-bottom: 5px; color: white;">
+                <button type="submit" style="background: #8b5cf6;">Upload Image</button>
+            </form>
+            <form id="command-form" style="margin-bottom: 10px;">
+                <input type="text" id="command-input" placeholder="Type a command..." style="width: 100%; padding: 10px; margin-bottom: 5px; background: #020617; color: white; border: 1px solid #334155; border-radius: 8px; box-sizing: border-box;">
+                <button type="submit" style="background: #8b5cf6;">Send Command</button>
+            </form>
             
             <h3>Aktivitas Log</h3>
             <div id="logs"></div>
@@ -153,14 +203,73 @@ HTML_TEMPLATE = """
                 });
             })
             .catch(e => console.error(e));
+
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('image-upload');
+            if (fileInput.files.length === 0) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            await fetch('/upload', { method: 'POST', body: formData });
+            fileInput.value = '';
+        });
+
+        document.getElementById('command-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cmdInput = document.getElementById('command-input');
+            const cmd = cmdInput.value.trim();
+            if (!cmd) return;
+            const formData = new FormData();
+            formData.append('command', cmd);
+            await fetch('/command', { method: 'POST', body: formData });
+            cmdInput.value = '';
+        });
     </script>
 </body>
 </html>
 """
 
+# ============================================================
+# ROUTES
+# ============================================================
+
 @app.get("/")
 async def get():
     return HTMLResponse(HTML_TEMPLATE)
+
+@app.get("/debug")
+async def get_debug():
+    """Halaman Debug Preview Realtime — halaman terpisah."""
+    from app.debug_dashboard import DEBUG_DASHBOARD_HTML
+    return HTMLResponse(DEBUG_DASHBOARD_HTML)
+
+@app.get("/proxy_stats")
+async def get_proxy_stats():
+    """Mengembalikan daftar Github repo dan API yang digunakan Proxy Hunter."""
+    import sys
+    sys.path.append("/workspaces/docker/au")
+    try:
+        from proxy_hunter import PROXY_SOURCES
+        import os
+        active_count = 0
+        used_count = 0
+        if os.path.exists("data/active_proxies.txt"):
+            with open("data/active_proxies.txt", "r") as f:
+                active_count = len(f.read().splitlines())
+        if os.path.exists("data/used_proxies.txt"):
+            with open("data/used_proxies.txt", "r") as f:
+                used_count = len(f.read().splitlines())
+                
+        import app.shared_ws as shared_ws
+        return {
+            "sources": PROXY_SOURCES,
+            "active_pool": active_count,
+            "blacklisted": used_count,
+            "current_proxy": getattr(shared_ws, "current_proxy", "Direct (Tanpa Proxy)"),
+            "current_account": getattr(shared_ws, "current_account", "Tidak ada")
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/accounts")
 async def get_accounts():
@@ -176,10 +285,35 @@ async def get_accounts():
                 accs.append({"raw": line.strip(), "display": display})
     return accs[::-1] # Reverse to show newest first
 
+from fastapi import File, UploadFile, Form
+import shutil
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    import os
+    os.makedirs("uploads", exist_ok=True)
+    file_location = f"uploads/{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        shutil.copyfileobj(file.file, file_object)
+    
+    # Broadcast log
+    await broadcast_to_all({"type": "log", "content": f"Image uploaded by user: {file.filename}"})
+    return {"info": f"file '{file.filename}' saved at '{file_location}'"}
+
+@app.post("/command")
+async def send_command(command: str = Form(...)):
+    # Broadcast command to logs
+    await broadcast_to_all({"type": "log", "content": f"[USER COMMAND]: {command}"})
+    return {"status": "ok", "command": command}
+
+# ============================================================
+# WebSocket: Dashboard Utama (untuk kontrol bot)
+# ============================================================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print(f"DEBUG: New WS Connection from {websocket.client}")
+    dashboard_clients.add(websocket)
+    print(f"DEBUG: Dashboard WS Connected from {websocket.client}")
     try:
         while True:
             data = await websocket.receive_json()
@@ -195,7 +329,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 await stop_task(websocket)
                 await emergency_stop(websocket)
     except WebSocketDisconnect:
-        print("DEBUG: WS Disconnected")
+        print("DEBUG: Dashboard WS Disconnected")
+    finally:
+        dashboard_clients.discard(websocket)
+
+# ============================================================
+# WebSocket: Debug Preview (read-only, hanya menerima stream)
+# ============================================================
+@app.websocket("/ws/debug")
+async def debug_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    debug_clients.add(websocket)
+    print(f"DEBUG: Debug WS Connected from {websocket.client}")
+    try:
+        while True:
+            # Debug client hanya menerima data, tapi kita perlu keep-alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        print("DEBUG: Debug WS Disconnected")
+    finally:
+        debug_clients.discard(websocket)
 
 from app.bot_engine import run_bot_task
 from app.task_manager import start_task, stop_task

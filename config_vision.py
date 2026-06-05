@@ -15,13 +15,18 @@ async def dummy_action(page, websocket):
 VISION_CONFIG_RULES = [
     {
         "state_name": "CHROME_FRE",
-        "keywords": [["accept", "continue"]], # Semua kata dalam sub-list harus ada
+        "keywords": [["accept", "continue"], ["use", "without", "account"]],
         "action_log": "Menyetujui persyaratan Chrome..."
     },
     {
         "state_name": "CHROME_SYNC",
         "keywords": [["no", "thanks"]],
         "action_log": "Menolak sinkronisasi Chrome..."
+    },
+    {
+        "state_name": "CHROME_PRIVACY",
+        "keywords": [["enhanced", "privacy"], ["ad", "privacy"]],
+        "action_log": "Menghadapi popup Privacy Chrome..."
     },
     {
         "state_name": "INSTALL_POPUP",
@@ -34,14 +39,19 @@ VISION_CONFIG_RULES = [
         "action_log": "Sedang mendownload/menginstall aplikasi (Realtime Rendering)..."
     },
     {
-        "state_name": "APP_STORE",
-        "keywords": [["commonapps"], ["tools"], ["store"]],
-        "action_log": "Berada di dalam App Store..."
+        "state_name": "HOME_SCREEN",
+        "keywords": [["guardianmaster"], ["devicemaster"], ["settings", "play", "store"]],
+        "action_log": "Berada di Home Screen Android..."
     },
     {
-        "state_name": "HOME_SCREEN",
-        "keywords": [["virtual", "location"]],
-        "action_log": "Berada di Home Screen Android..."
+        "state_name": "APP_INSTALLED",
+        "keywords": [["app", "installed"], ["installed.", "done"]],
+        "action_log": "Aplikasi telah selesai diinstal. Menunggu dibuka..."
+    },
+    {
+        "state_name": "APP_STORE",
+        "keywords": [["commonapps"], ["tools"], ["top charts"]],
+        "action_log": "Berada di dalam App Store..."
     },
     {
         "state_name": "CHROME_MAIN",

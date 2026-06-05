@@ -49,6 +49,8 @@ async def wait_and_click_ocr(page, websocket, target_text, timeout=60, confidenc
                         img.save(buffered, format="JPEG")
                         b64_debug = base64.b64encode(buffered.getvalue()).decode('utf-8')
                         await websocket.send_json({"type": "debug_image", "content": b64_debug})
+                        # Broadcast ke debug clients juga
+                        await _broadcast_debug({"type": "debug_image", "content": b64_debug})
                     except Exception: pass
                     
                     css_x = center_x / 3
@@ -69,6 +71,7 @@ async def wait_and_click_ocr(page, websocket, target_text, timeout=60, confidenc
         img.save(buffered, format="JPEG")
         b64_debug = base64.b64encode(buffered.getvalue()).decode('utf-8')
         await websocket.send_json({"type": "debug_image", "content": b64_debug})
+        await _broadcast_debug({"type": "debug_image", "content": b64_debug})
     except: pass
     
     await websocket.send_json({"type": "log", "content": f"[Vision] TIMEOUT: Gagal menemukan '{target_text}' dalam {timeout} detik."})
@@ -78,21 +81,63 @@ async def stream_visuals(page, websocket, stop_event):
     """Task background untuk mengirim screenshot ke dashboard secara realtime (Viewport HP)."""
     while not stop_event.is_set():
         try:
-            # Cari video Webrtc Android dulu biar screenshotnya fokus ke layar HP
+            screenshot_bytes = None
+            
+            # Strategy 1: iframe > video
             try:
                 frame = page.frame_locator("iframe").first
                 video = frame.locator("video").first
-                if await video.is_visible(timeout=1000):
+                if await video.is_visible(timeout=500):
                     screenshot_bytes = await video.screenshot(type="jpeg", quality=40)
-                else:
-                    screenshot_bytes = await page.screenshot(type="jpeg", quality=40)
             except:
+                pass
+            
+            # Strategy 2: direct video
+            if not screenshot_bytes:
+                try:
+                    video_direct = page.locator("video").first
+                    if await video_direct.is_visible(timeout=500):
+                        screenshot_bytes = await video_direct.screenshot(type="jpeg", quality=40)
+                except:
+                    pass
+            
+            # Strategy 3: canvas
+            if not screenshot_bytes:
+                try:
+                    canvas = page.locator("canvas").first
+                    if await canvas.is_visible(timeout=500):
+                        screenshot_bytes = await canvas.screenshot(type="jpeg", quality=40)
+                except:
+                    pass
+            
+            # Strategy 4: full page
+            if not screenshot_bytes:
                 screenshot_bytes = await page.screenshot(type="jpeg", quality=40)
+            
+            import app.shared_ws as shared_ws
+            shared_ws.latest_frame_bytes = screenshot_bytes
                 
             b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
             await websocket.send_json({"type": "image", "content": b64_img})
+            # Broadcast ke semua debug clients juga
+            await _broadcast_debug({"type": "image", "content": b64_img})
         except asyncio.CancelledError:
             break
         except Exception:
             pass
-        await asyncio.sleep(1) # Refresh rate 1 fps
+        await asyncio.sleep(0.2) # Refresh rate ~5 fps (REALTIME!)
+
+
+async def _broadcast_debug(data):
+    """Helper: Broadcast data ke semua debug WebSocket clients."""
+    try:
+        from app.shared_ws import debug_clients
+        dead = set()
+        for ws in debug_clients:
+            try:
+                await ws.send_json(data)
+            except Exception:
+                dead.add(ws)
+        debug_clients -= dead
+    except ImportError:
+        pass  # Server belum ready, skip

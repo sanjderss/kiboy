@@ -12,7 +12,7 @@ class GuerrillaMail:
         self.address = resp['email_addr']
         self.sid_token = resp['sid_token']
         # Optionally set a random domain that is less blocked
-        domains = ['guerrillamail.info']
+        domains = ['sharklasers.com', 'spam4.me', 'pokemail.net']
         self.domain = random.choice(domains)
         self.session.get(f"http://api.guerrillamail.com/ajax.php?f=set_email_user&email_user={self.address.split('@')[0]}&domain={self.domain}&sid_token={self.sid_token}")
         self.address = f"{self.address.split('@')[0]}@{self.domain}"
